@@ -1,8 +1,10 @@
-import type { FrameBlockModel, NoteBlockModel } from '@blocksuite/affine-model';
+import type { FrameBlockModel } from '@blocksuite/affine-model';
+import type { NoteBlockModel } from '@blocksuite/affine-model';
 import type { Doc } from '@blocksuite/store';
 
-import { Bound, DisposableGroup, assertExists } from '@blocksuite/global/utils';
-import { DocCollection } from '@blocksuite/store';
+import { BlockSuiteError, ErrorCode } from '@blocksuite/global/exceptions';
+import { Bound, DisposableGroup, type IVec } from '@blocksuite/global/utils';
+import { Boxed, DocCollection } from '@blocksuite/store';
 
 import type { EdgelessRootService } from '../../index.js';
 import type { SurfaceBlockModel } from '../../surface-block/surface-model.js';
@@ -15,15 +17,6 @@ import { isFrameBlock } from './utils/query.js';
 const MIN_FRAME_WIDTH = 800;
 const MIN_FRAME_HEIGHT = 640;
 const FRAME_PADDING = 40;
-
-export function removeContainedFrames(frames: FrameBlockModel[]) {
-  return frames.filter(frame => {
-    const bound = Bound.deserialize(frame.xywh);
-    return frames.some(
-      f => f.id === frame.id || !Bound.deserialize(f.xywh).contains(bound)
-    );
-  });
-}
 
 export class FrameOverlay extends Overlay {
   bound: Bound | null = null;
@@ -51,23 +44,58 @@ export class FrameOverlay extends Overlay {
   }
 }
 
-export function isFrameInner(
-  frame: FrameBlockModel,
-  frames: FrameBlockModel[]
-) {
-  const bound = Bound.deserialize(frame.xywh);
-  return frames.some(
-    f => f.id !== frame.id && Bound.deserialize(f.xywh).contains(bound)
-  );
-}
-
 export class EdgelessFrameManager {
   private _disposable = new DisposableGroup();
 
-  constructor(private _rootService: EdgelessRootService) {}
+  constructor(private _rootService: EdgelessRootService) {
+    this._watchElementDeleted();
+  }
+
+  private _watchElementDeleted() {
+    this._disposable.add(
+      this._rootService.surface.elementRemoved.on(({ model }) => {
+        this.removeParentFrame(model);
+      })
+    );
+
+    this._disposable.add(
+      this._rootService.doc.slots.blockUpdated.on(payload => {
+        if (payload.type === 'delete') {
+          const element = this._rootService.getElementById(payload.model.id);
+          if (element) this.removeParentFrame(element);
+        }
+      })
+    );
+  }
+
+  /**
+   * Reset parent of elements to the frame
+   */
+  addElementsToFrame(
+    frame: FrameBlockModel,
+    elements: BlockSuite.EdgelessModel[]
+  ) {
+    if (frame.childElementIds === undefined) {
+      elements = [...elements, ...this.getChildElementsInFrame(frame)];
+      frame.childElementIds = new Boxed(new DocCollection.Y.Map());
+    }
+
+    elements = elements.filter(
+      ({ id }) => id !== frame.id && !frame.childElementIds?.getValue()?.has(id)
+    );
+
+    this._rootService.doc.transact(() => {
+      elements.forEach(element => {
+        const parentFrame = this.getParentFrame(element);
+        if (parentFrame) {
+          parentFrame.childElementIds?.getValue()?.delete(element.id);
+        }
+        frame.childElementIds?.getValue()?.set(element.id, true);
+      });
+    });
+  }
 
   createFrameOnSelected() {
-    const frames = this._rootService.frames;
     const surfaceModel =
       this._rootService.doc.getBlockByFlavour('affine:surface')[0];
 
@@ -86,14 +114,26 @@ export class EdgelessFrameManager {
     const id = this._rootService.addBlock(
       'affine:frame',
       {
-        title: new DocCollection.Y.Text(`Frame ${frames.length + 1}`),
+        title: new DocCollection.Y.Text(`Frame ${this.frames.length + 1}`),
         xywh: bound.serialize(),
       },
       surfaceModel
     );
     const frameModel = this._rootService.getElementById(id);
+
+    if (!frameModel || !isFrameBlock(frameModel)) {
+      throw new BlockSuiteError(
+        ErrorCode.GfxBlockElementError,
+        'Frame model is not found'
+      );
+    }
+
+    this.addElementsToFrame(
+      frameModel,
+      this.getElementsInFrameBound(frameModel)
+    );
+
     this._rootService.doc.captureSync();
-    assertExists(frameModel);
 
     this._rootService.selection.set({
       elements: [frameModel.id],
@@ -107,34 +147,88 @@ export class EdgelessFrameManager {
     this._disposable.dispose();
   }
 
-  getElementsInFrame(frame: FrameBlockModel, fullyContained = true) {
+  /**
+   * Get all elements in the frame, there are three cases:
+   * 1. The frame doesn't have `childElements`, return all elements in the frame bound but not owned by another frame.
+   * 2. Return all child elements of the frame if `childElements` exists.
+   */
+  getChildElementsInFrame(frame: FrameBlockModel): BlockSuite.EdgelessModel[] {
+    if (frame.childElementIds === undefined) {
+      return this.getElementsInFrameBound(frame).filter(
+        element => this.getParentFrame(element) !== null
+      );
+    }
+
+    const childElementIds = [
+      ...(frame.childElementIds.getValue()?.keys() ?? []),
+    ];
+
+    const childElements = childElementIds
+      .map(id => this._rootService.getElementById(id))
+      .filter(element => element !== null);
+
+    return childElements;
+  }
+
+  /**
+   * Get all elements in the frame bound,
+   * whatever the element already has another parent frame or not.
+   */
+  getElementsInFrameBound(frame: FrameBlockModel, fullyContained = true) {
     const bound = Bound.deserialize(frame.xywh);
     const elements: BlockSuite.EdgelessModel[] =
       this._rootService.layer.canvasGrid.search(bound, true);
 
     return elements.concat(
-      getBlocksInFrame(this._rootService.doc, frame, fullyContained)
+      getBlocksInFrameBound(this._rootService.doc, frame, fullyContained)
     );
   }
 
-  selectFrame(eles: BlockSuite.EdgelessModel[]) {
-    const frames = this._rootService.frames;
-    if (frames.length === 0) return null;
-
-    const selectedFrames = eles.filter(ele => isFrameBlock(ele));
-    const bound = edgelessElementsBound(eles);
-    for (let i = frames.length - 1; i >= 0; i--) {
-      const frame = frames[i];
-      if (selectedFrames.includes(frame)) continue;
-      if (Bound.deserialize(frame.xywh).contains(bound)) {
+  /**
+   * Get most top frame from the point.
+   */
+  getFrameFromPoint([x, y]: IVec, ignoreFrames: FrameBlockModel[] = []) {
+    for (let i = this.frames.length - 1; i >= 0; i--) {
+      const frame = this.frames[i];
+      if (frame.includesPoint(x, y, {}) && !ignoreFrames.includes(frame)) {
         return frame;
       }
     }
     return null;
   }
+
+  getParentFrame(element: BlockSuite.EdgelessModel) {
+    return (
+      this.frames.find(frame => {
+        return frame.childElementIds?.getValue()?.has(element.id);
+      }) ?? null
+    );
+  }
+
+  removeAllChildrenFromFrame(frame: FrameBlockModel) {
+    this._rootService.doc.transact(() => {
+      frame.childElementIds?.getValue()?.clear();
+    });
+  }
+
+  removeParentFrame(element: BlockSuite.EdgelessModel) {
+    this._rootService.doc.transact(() => {
+      const parentFrame = this.getParentFrame(element);
+      if (parentFrame) {
+        parentFrame.childElementIds?.getValue()?.delete(element.id);
+      }
+    });
+  }
+
+  /**
+   * Get all sorted frames
+   */
+  get frames() {
+    return this._rootService.frames;
+  }
 }
 
-export function getNotesInFrame(
+export function getNotesInFrameBound(
   doc: Doc,
   frame: FrameBlockModel,
   fullyContained: boolean = true
@@ -152,7 +246,7 @@ export function getNotesInFrame(
   ) as NoteBlockModel[];
 }
 
-export function getBlocksInFrame(
+export function getBlocksInFrameBound(
   doc: Doc,
   model: FrameBlockModel,
   fullyContained: boolean = true
@@ -163,7 +257,7 @@ export function getBlocksInFrame(
   ]) as SurfaceBlockModel[];
 
   return (
-    getNotesInFrame(
+    getNotesInFrameBound(
       doc,
       model,
       fullyContained

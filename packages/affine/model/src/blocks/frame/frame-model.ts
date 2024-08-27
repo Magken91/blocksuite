@@ -1,10 +1,19 @@
-import type {
-  GfxElementGeometry,
-  PointTestOptions,
+import {
+  type GfxContainerElement,
+  type GfxElementGeometry,
+  type PointTestOptions,
+  SurfaceBlockModel,
+  gfxContainerSymbol,
 } from '@blocksuite/block-std/gfx';
-
 import { Bound, type SerializedXYWH } from '@blocksuite/global/utils';
-import { BlockModel, type Text, defineBlockSchema } from '@blocksuite/store';
+import {
+  BlockModel,
+  Boxed,
+  DocCollection,
+  type Text,
+  type Y,
+  defineBlockSchema,
+} from '@blocksuite/store';
 
 import type { Color } from '../../consts/index.js';
 
@@ -15,6 +24,7 @@ type FrameBlockProps = {
   background: Color;
   xywh: SerializedXYWH;
   index: string;
+  childElementIds?: Boxed<Y.Map<boolean>>;
 };
 
 export const FrameBlockSchema = defineBlockSchema({
@@ -24,6 +34,7 @@ export const FrameBlockSchema = defineBlockSchema({
     background: '--affine-palette-transparent',
     xywh: `[0,0,100,100]`,
     index: 'a0',
+    childElementIds: new Boxed(new DocCollection.Y.Map()),
   }),
   metadata: {
     version: 1,
@@ -38,15 +49,13 @@ export const FrameBlockSchema = defineBlockSchema({
 
 export class FrameBlockModel
   extends GfxCompatible<FrameBlockProps>(BlockModel)
-  implements GfxElementGeometry
+  implements GfxElementGeometry, GfxContainerElement
 {
+  [gfxContainerSymbol] = true as const;
+
   override includesPoint(x: number, y: number, _: PointTestOptions): boolean {
     const bound = Bound.deserialize(this.xywh);
-    const hit = bound.isPointNearBound([x, y], 5);
-
-    if (hit) return true;
-
-    return this.externalBound?.isPointInBound([x, y]) ?? false;
+    return bound.isPointInBound([x, y]);
   }
 
   override intersectsBound(selectedBound: Bound): boolean {
@@ -54,6 +63,21 @@ export class FrameBlockModel
     return (
       bound.isIntersectWithBound(selectedBound) || selectedBound.contains(bound)
     );
+  }
+
+  get childElements() {
+    const surface = this.doc
+      .getBlocks()
+      .find(model => model instanceof SurfaceBlockModel);
+    if (!surface) return [];
+
+    return this.childIds
+      .map(id => surface.getElementById(id))
+      .filter(element => element !== null);
+  }
+
+  get childIds() {
+    return [...(this.childElementIds?.getValue()?.keys() ?? [])];
   }
 }
 

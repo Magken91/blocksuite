@@ -28,7 +28,7 @@ export async function duplicate(
   select = true
 ) {
   const { clipboardController } = edgeless;
-  const copyElements = getCloneElements(elements, edgeless.service.frame);
+  const copyElements = getCloneElements(elements);
   const totalBound = edgelessElementsBound(copyElements);
   totalBound.x += totalBound.w + offset;
 

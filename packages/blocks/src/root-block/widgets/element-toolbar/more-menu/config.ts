@@ -305,10 +305,7 @@ export const conversionsGroup: MenuItemGroup<ElementToolbarMoreMenuContext> = {
         const title = await promptDocTitle(host);
         if (title === null) return;
 
-        const elements = getCloneElements(
-          selection.selectedElements,
-          service.frame
-        );
+        const elements = getCloneElements(selection.selectedElements);
         const linkedDoc = createLinkedDocFromEdgelessElements(
           host,
           elements,

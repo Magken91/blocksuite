@@ -135,10 +135,7 @@ export class EdgelessClipboardController extends PageClipboard {
     const event = _context.get('clipboardState').raw;
     event.preventDefault();
 
-    const elements = getCloneElements(
-      this.selectionManager.selectedElements,
-      this.edgeless.service.frame
-    );
+    const elements = getCloneElements(this.selectionManager.selectedElements);
 
     // when note active, handle copy like page mode
     if (surfaceSelection[0] && surfaceSelection[0].editing) {
@@ -176,10 +173,7 @@ export class EdgelessClipboardController extends PageClipboard {
       return;
     }
 
-    const elements = getCloneElements(
-      this.selectionManager.selectedElements,
-      this.edgeless.service.frame
-    );
+    const elements = getCloneElements(this.selectionManager.selectedElements);
     this.doc.transact(() => {
       deleteElements(this.edgeless, elements);
     });
@@ -993,7 +987,7 @@ export class EdgelessClipboardController extends PageClipboard {
       if (matchFlavours(nodeElement, ['affine:frame'])) {
         const blocksInsideFrame: BlockSuite.EdgelessBlockModelType[] = [];
         this.edgeless.service.frame
-          .getElementsInFrame(nodeElement, false)
+          .getElementsInFrameBound(nodeElement, false)
           .forEach(ele => {
             if (isTopLevelBlock(ele)) {
               blocksInsideFrame.push(ele as BlockSuite.EdgelessBlockModelType);

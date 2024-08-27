@@ -14,26 +14,23 @@ import { type BlockSnapshot, Job } from '@blocksuite/store';
 
 import type { SerializedMindmapElement } from '../../../surface-block/element-model/mindmap.js';
 import type { NodeDetail } from '../../../surface-block/element-model/utils/mindmap/layout.js';
-import type { EdgelessFrameManager } from '../frame-manager.js';
 
-import { SurfaceGroupLikeModel } from '../../../surface-block/element-model/base.js';
 import { MindmapElementModel } from '../../../surface-block/index.js';
 import { GfxBlockModel } from '../block-model.js';
-import { isFrameBlock } from '../utils/query.js';
+import { getAllDescendantElements } from './tree.js';
 
-export function getCloneElements(
-  elements: BlockSuite.EdgelessModel[],
-  frame: EdgelessFrameManager
-) {
+/**
+ * return all elements in the tree of the elements
+ */
+export function getCloneElements(elements: BlockSuite.EdgelessModel[]) {
   const set = new Set<BlockSuite.EdgelessModel>();
   elements.forEach(element => {
-    set.add(element);
-    if (isFrameBlock(element)) {
-      frame.getElementsInFrame(element).forEach(ele => set.add(ele));
-    } else if (element instanceof SurfaceGroupLikeModel) {
-      const children = element.childElements;
-      getCloneElements(children, frame).forEach(ele => set.add(ele));
-    }
+    // this element subtree has been added
+    if (set.has(element)) return;
+
+    getAllDescendantElements(element, true).map(descendant =>
+      set.add(descendant)
+    );
   });
   return Array.from(set);
 }

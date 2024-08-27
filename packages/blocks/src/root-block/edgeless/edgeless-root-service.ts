@@ -423,28 +423,32 @@ export class EdgelessRootService extends RootService implements SurfaceContext {
       );
       return picked as BlockSuite.EdgelessModel[];
     };
-    const pickFrames = () => {
-      return this._layer.frames.filter(
-        frame =>
-          frame.includesPoint(x, y, options as PointTestOptions) ||
-          frame.externalBound?.isPointInBound([x, y])
+    const pickFrames = (byTitle: boolean) => {
+      return this._layer.frames.filter(frame =>
+        byTitle
+          ? frame.externalBound?.isPointInBound([x, y])
+          : frame.includesPoint(x, y, options)
       ) as BlockSuite.EdgelessModel[];
     };
 
-    const frames = pickFrames();
+    const framesByTitle = pickFrames(true);
 
-    if (frames.length === 0 || all) {
+    if (framesByTitle.length === 0 || all) {
       let results = pickCanvasElement().concat(pickBlock());
 
-      // FIXME: optimazation on ordered element
+      // FIXME(@doouding): optimization on ordered element
       results.sort(this._layer.compare);
 
-      results = results.concat(frames);
+      // The order is following: high to low
+      // 1. frames by pick title (fx -> f0)
+      // 2. block and canvas elements (bx -> ex -> ... -> b0 -> e0)
+      // 3. frames by pick bound (f'x -> f'0)
+      results = [...pickFrames(false), ...results, ...framesByTitle];
 
       // prettier-ignore
       return options.all ? results : (last(results) ?? null);
     } else {
-      return last(frames) ?? null;
+      return last(framesByTitle) ?? null;
     }
   }
 
@@ -462,7 +466,7 @@ export class EdgelessRootService extends RootService implements SurfaceContext {
     const results = this.pickElement(x, y, {
       ...options,
       all: true,
-    }) as BlockSuite.EdgelessModel[];
+    });
 
     let picked = last(results) ?? null;
     const { activeGroup } = selectionManager;
@@ -712,6 +716,9 @@ export class EdgelessRootService extends RootService implements SurfaceContext {
     return this._frame;
   }
 
+  /**
+   * sorted frames
+   */
   get frames() {
     return this._layer.frames;
   }
