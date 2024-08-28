@@ -1,17 +1,25 @@
 import type { ImageBlockModel } from '@blocksuite/affine-model';
 
-import { CaptionIcon, DownloadIcon } from '@blocksuite/affine-components/icons';
+import {
+  CaptionIcon,
+  CropIcon,
+  DownloadIcon,
+} from '@blocksuite/affine-components/icons';
 import { WithDisposable } from '@blocksuite/block-std';
 import { LitElement, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
-import type { ImageBlockComponent } from '../../../image-block/image-block.js';
+import type { ImageEdgelessBlockComponent } from '../../../image-block/image-edgeless-block.js';
 import type { EdgelessRootBlockComponent } from '../../edgeless/edgeless-root-block.js';
 
 import { downloadImageBlob } from '../../../image-block/utils.js';
 
 @customElement('edgeless-change-image-button')
 export class EdgelessChangeImageButton extends WithDisposable(LitElement) {
+  private _cropImage = () => {
+    void this._blockComponent?.crop();
+  };
+
   private _download = () => {
     if (!this._blockComponent) return;
     downloadImageBlob(this._blockComponent).catch(console.error);
@@ -32,7 +40,7 @@ export class EdgelessChangeImageButton extends WithDisposable(LitElement) {
 
     const block = this.edgeless.std.view.getBlock(
       blockSelection[0].blockId
-    ) as ImageBlockComponent | null;
+    ) as ImageEdgelessBlockComponent | null;
 
     return block;
   }
@@ -43,6 +51,17 @@ export class EdgelessChangeImageButton extends WithDisposable(LitElement) {
 
   override render() {
     return html`
+      <editor-icon-button
+        aria-label="Crop Image"
+        .tooltip=${'Crop Image'}
+        ?disabled=${this._doc.readonly}
+        @click=${this._cropImage}
+      >
+        ${CropIcon}
+      </editor-icon-button>
+
+      <editor-toolbar-separator></editor-toolbar-separator>
+
       <editor-icon-button
         aria-label="Download"
         .tooltip=${'Download'}

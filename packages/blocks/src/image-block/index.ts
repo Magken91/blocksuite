@@ -1,3 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="./cropperjs.d.ts" />
+
 import type { ImageBlockService } from './image-service.js';
 
 export * from './image-block.js';

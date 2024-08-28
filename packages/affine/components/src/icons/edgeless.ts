@@ -9,6 +9,11 @@ export const SelectIcon = icons.SelectIcon({
   height: '24',
 });
 
+export const CropIcon = icons.CropIcon({
+  width: '24',
+  height: '24',
+});
+
 export const LassoFreeHandIcon = html`
   <svg
     width="24"

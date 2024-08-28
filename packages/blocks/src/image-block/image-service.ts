@@ -40,7 +40,10 @@ export class ImageBlockService extends BlockService<ImageBlockModel> {
     edgeless: true,
     onDragStart: ({ state, startDragging, anchorBlockPath, editorHost }) => {
       const element = captureEventTarget(state.raw.target);
+
       if (element?.classList.contains('resize')) return false;
+
+      if (element?.tagName === 'CROPPER-HANDLE') return true;
 
       if (!anchorBlockPath) return false;
       const anchorComponent = editorHost.std.view.getBlock(anchorBlockPath);
@@ -53,6 +56,8 @@ export class ImageBlockService extends BlockService<ImageBlockModel> {
       const blockComponent = anchorComponent as
         | ImageBlockComponent
         | ImageEdgelessBlockComponent;
+
+      if (blockComponent?.querySelector('cropper-image')) return true;
 
       const isDraggingByDragHandle = !!element?.closest(
         AFFINE_DRAG_HANDLE_WIDGET
