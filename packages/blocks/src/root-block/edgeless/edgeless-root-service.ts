@@ -4,7 +4,7 @@ import type {
   ReferenceInfo,
 } from '@blocksuite/affine-model';
 import type { BlockServiceOptions } from '@blocksuite/block-std';
-import type { PointTestOptions } from '@blocksuite/block-std/gfx';
+import type { GfxModel, PointTestOptions } from '@blocksuite/block-std/gfx';
 import type { IBound } from '@blocksuite/global/utils';
 
 import { clamp } from '@blocksuite/affine-shared/utils';
@@ -686,14 +686,14 @@ export class EdgelessRootService extends RootService {
     this.viewport.setViewport(zoom, [centerX, centerY], true);
   }
 
-  get blocks() {
+  get blocks(): GfxModel[] {
     return (this.frames as GfxBlockModel[]).concat(this._layer.blocks);
   }
 
   /**
    * sorted edgeless elements
    */
-  get edgelessElements() {
+  get edgelessElements(): GfxModel[] {
     return [
       ...this._layer.canvasElements,
       ...this._layer.blocks,
