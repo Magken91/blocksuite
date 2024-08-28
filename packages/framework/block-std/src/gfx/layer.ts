@@ -23,7 +23,6 @@ import {
 import { GridManager } from './grid.js';
 import {
   type GfxContainerElement,
-  GfxGroupLikeElementModel,
   GfxPrimitiveElementModel,
   isGfxContainerElm,
 } from './surface/element-model.js';
@@ -692,7 +691,7 @@ export class LayerManager {
 
   delete(element: GfxModel) {
     let deleteType: 'canvas' | 'block' | undefined = undefined;
-    const isGroup = element instanceof GfxGroupLikeElementModel;
+    const isGroup = isGfxContainerElm(element);
 
     if (isGroup) {
       this._reset();
