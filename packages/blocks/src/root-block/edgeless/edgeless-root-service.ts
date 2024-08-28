@@ -686,7 +686,7 @@ export class EdgelessRootService extends RootService {
     this.viewport.setViewport(zoom, [centerX, centerY], true);
   }
 
-  get blocks(): GfxModel[] {
+  get blocks(): GfxBlockModel[] {
     return (this.frames as GfxBlockModel[]).concat(this._layer.blocks);
   }
 
