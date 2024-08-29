@@ -49,6 +49,8 @@ export class RangeControl {
   private _prev: Range | null = null;
 
   private _selectionChange = (event: Event) => {
+    if (!this._dispatcher.host.event.active) return;
+
     const selection = document.getSelection();
     if (!selection) return;
 

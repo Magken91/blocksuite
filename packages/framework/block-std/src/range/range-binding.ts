@@ -164,6 +164,7 @@ export class RangeBinding {
     if (this.isComposing) return;
 
     await this.host.updateComplete;
+    if (!this.host.event.active) return;
 
     const selection = document.getSelection();
     if (!selection) {
