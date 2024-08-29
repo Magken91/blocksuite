@@ -19,8 +19,6 @@ export const ZOOM_INITIAL = 1.0;
 export class Viewport {
   protected _center: IPoint = { x: 0, y: 0 };
 
-  protected _cumulativeParentScale = 1;
-
   protected _el!: HTMLElement;
 
   protected _height = 0;
@@ -309,13 +307,6 @@ export class Viewport {
     return this._center.y;
   }
 
-  /**
-   * @deprecated
-   */
-  get cumulativeParentScale() {
-    return this._cumulativeParentScale;
-  }
-
   get height() {
     return this._height;
   }
@@ -359,8 +350,8 @@ export class Viewport {
 
     return Bound.from({
       ...viewportMinXY,
-      w: (viewportMaxXY.x - viewportMinXY.x) / this._cumulativeParentScale,
-      h: (viewportMaxXY.y - viewportMinXY.y) / this._cumulativeParentScale,
+      w: viewportMaxXY.x - viewportMinXY.x,
+      h: viewportMaxXY.y - viewportMinXY.y,
     });
   }
 

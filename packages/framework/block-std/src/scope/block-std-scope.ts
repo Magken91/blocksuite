@@ -5,6 +5,7 @@ import type { EditorHost } from '../view/element/index.js';
 import { Clipboard } from '../clipboard/index.js';
 import { CommandManager } from '../command/index.js';
 import { UIEventDispatcher } from '../event/index.js';
+import { GfxController } from '../gfx/controller.js';
 import { RangeManager } from '../range/index.js';
 import { SelectionManager } from '../selection/index.js';
 import { SpecStore } from '../spec/index.js';
@@ -25,6 +26,8 @@ export class BlockStdScope {
   readonly doc: Doc;
 
   readonly event: UIEventDispatcher;
+
+  readonly gfx: GfxController;
 
   readonly host: EditorHost;
 
@@ -47,6 +50,7 @@ export class BlockStdScope {
     this.spec = new SpecStore(this);
     this.view = new ViewStore(this);
     this.clipboard = new Clipboard(this);
+    this.gfx = new GfxController(this);
   }
 
   mount() {
@@ -62,6 +66,7 @@ export class BlockStdScope {
     this.selection.unmount();
     this.view.unmount();
     this.spec.unmount();
+    this.gfx.umount();
   }
 }
 
