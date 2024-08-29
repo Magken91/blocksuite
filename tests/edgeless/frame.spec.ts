@@ -1,7 +1,6 @@
 import { type Page, expect } from '@playwright/test';
-import { waitNextFrame } from 'utils/actions/misc.js';
 
-import { dblclickView } from '../utils/actions/click.js';
+import { clickView, dblclickView, moveView } from '../utils/actions/click.js';
 import {
   Shape,
   addNote,
@@ -9,13 +8,22 @@ import {
   createShapeElement,
   dragBetweenViewCoords,
   edgelessCommonSetup,
+  getSelectedBound,
+  getSelectedBoundCount,
   setEdgelessTool,
+  shiftClickView,
   toViewCoord,
   triggerComponentToolbarAction,
   zoomOutByKeyboard,
+  zoomResetByKeyboard,
 } from '../utils/actions/edgeless.js';
 import {
+  SHORT_KEY,
+  copyByKeyboard,
+  pasteByKeyboard,
+  pressBackspace,
   pressEnter,
+  pressEscape,
   selectAllByKeyboard,
   type,
 } from '../utils/actions/keyboard.js';
@@ -26,142 +34,589 @@ import {
 } from '../utils/asserts.js';
 import { test } from '../utils/playwright.js';
 
+test.beforeEach(async ({ page }) => {
+  await edgelessCommonSetup(page);
+  await zoomResetByKeyboard(page);
+});
+
 test.describe('frame', () => {
-  async function init(page: Page) {
-    await edgelessCommonSetup(page);
-    await createShapeElement(page, [0, 0], [100, 100], Shape.Square);
-    await createShapeElement(page, [100, 0], [200, 100], Shape.Square);
-    await selectAllByKeyboard(page);
-  }
+  test.describe('add a frame then drag to move', () => {
+    const createThreeShapesAndSelectTowShape = async (page: Page) => {
+      await createShapeElement(page, [0, 0], [100, 100], Shape.Square);
+      await createShapeElement(page, [100, 0], [200, 100], Shape.Square);
+      await createShapeElement(page, [200, 0], [300, 100], Shape.Square);
 
-  async function addFrame(page: Page) {
-    await init(page);
-    await triggerComponentToolbarAction(page, 'addFrame');
-  }
-  test.describe('add frame', () => {
-    test('multi select add frame by component toolbar', async ({ page }) => {
-      await addFrame(page);
-      await assertSelectedBound(page, [-300, -270, 800, 640]);
-    });
+      await clickView(page, [50, 50]);
+      await shiftClickView(page, [150, 50]);
+    };
 
-    test('add frame by shortcut F', async ({ page }) => {
-      await init(page);
+    const assertFrameHasTwoShapeChildren = async (page: Page) => {
+      await page.waitForTimeout(500);
+      await dragBetweenViewCoords(page, [50, 50], [100, 50]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [50, 0, 100, 100], 0);
+      await assertSelectedBound(page, [150, 0, 100, 100], 1);
+      // the third shape should not be moved
+      await assertSelectedBound(page, [200, 0, 100, 100], 2);
+    };
+
+    test('multi select and add frame by shortcut F', async ({ page }) => {
+      await createThreeShapesAndSelectTowShape(page);
       await page.keyboard.press('f');
+
+      await expect(page.locator('affine-frame')).toHaveCount(1);
       await assertSelectedBound(page, [-300, -270, 800, 640]);
+
+      await assertFrameHasTwoShapeChildren(page);
     });
 
-    test('add frame by more option create frame', async ({ page }) => {
-      await init(page);
+    test('multi select and add frame by component toolbar', async ({
+      page,
+    }) => {
+      await createThreeShapesAndSelectTowShape(page);
+      await triggerComponentToolbarAction(page, 'addFrame');
+
+      await expect(page.locator('affine-frame')).toHaveCount(1);
+      await assertSelectedBound(page, [-300, -270, 800, 640]);
+
+      await assertFrameHasTwoShapeChildren(page);
+    });
+
+    test('multi select and add frame by more option create frame', async ({
+      page,
+    }) => {
+      await createThreeShapesAndSelectTowShape(page);
       await triggerComponentToolbarAction(page, 'createFrameOnMoreOption');
+
+      await expect(page.locator('affine-frame')).toHaveCount(1);
       await assertSelectedBound(page, [-300, -270, 800, 640]);
+
+      await assertFrameHasTwoShapeChildren(page);
     });
 
-    test('add frame by edgeless toolbar', async ({ page }) => {
-      await init(page);
+    test('multi select add frame by edgeless toolbar', async ({ page }) => {
+      await createThreeShapesAndSelectTowShape(page);
       await autoFit(page);
       await setEdgelessTool(page, 'frame');
       const frameMenu = page.locator('edgeless-frame-menu');
       await expect(frameMenu).toBeVisible();
       const button = page.locator('.frame-add-button[data-name="1:1"]');
       await button.click();
-      await assertSelectedBound(page, [-500, -550, 1200, 1200]);
+      await assertSelectedBound(page, [-450, -550, 1200, 1200]);
+
+      await dragBetweenViewCoords(page, [50, 50], [100, 50]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [50, 0, 100, 100], 0);
+      await assertSelectedBound(page, [150, 0, 100, 100], 1);
+      // the third shape should be moved
+      await assertSelectedBound(page, [250, 0, 100, 100], 2);
+    });
+
+    test('add frame by dragging with shortcut F', async ({ page }) => {
+      await createThreeShapesAndSelectTowShape(page);
+      await pressEscape(page); // unselect
+
+      await page.keyboard.press('f');
+      await dragBetweenViewCoords(page, [-10, -10], [210, 110]);
+
+      await expect(page.locator('affine-frame')).toHaveCount(1);
+      await assertSelectedBound(page, [-10, -10, 220, 120]);
+
+      await assertFrameHasTwoShapeChildren(page);
     });
   });
 
-  test('drag frame to move', async ({ page }) => {
-    await addFrame(page);
+  const createFrame = async (
+    page: Page,
+    coord1: [number, number],
+    coord2: [number, number]
+  ) => {
+    await page.keyboard.press('f');
+    await dragBetweenViewCoords(page, coord1, coord2);
     await autoFit(page);
-    await dragBetweenViewCoords(page, [100, 50], [120, 70]);
+  };
+
+  test.describe('edit frame title', () => {
+    const enterFrameTitleEditor = async (page: Page) => {
+      const frameTitle = page.locator('.affine-frame-title');
+      await frameTitle.dblclick();
+
+      const frameTitleEditor = page.locator('edgeless-frame-title-editor');
+      await frameTitleEditor.waitFor({
+        state: 'attached',
+      });
+      return frameTitleEditor;
+    };
+
+    test('edit frame title by db-click title', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+
+      await enterFrameTitleEditor(page);
+
+      await type(page, 'ABC');
+      await assertEdgelessCanvasText(page, 'ABC');
+    });
+
+    test('should not display frame title component when title is empty', async ({
+      page,
+    }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      await enterFrameTitleEditor(page);
+
+      await type(page, '');
+      const frameTitle = page.locator('.affine-frame-title');
+      await expect(frameTitle).toHaveCount(0);
+    });
+
+    test('edit frame after zoom', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      await autoFit(page);
+      await zoomOutByKeyboard(page);
+      await enterFrameTitleEditor(page);
+      await type(page, 'ABC');
+      await assertEdgelessCanvasText(page, 'ABC');
+    });
+
+    test('edit frame title after drag', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      await dragBetweenViewCoords(page, [50 + 10, 50 + 10], [50 + 20, 50 + 20]);
+      await enterFrameTitleEditor(page);
+      await type(page, 'ABC');
+      await assertEdgelessCanvasText(page, 'ABC');
+    });
+
+    test('blur unmount frame editor', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      const frameTitleEditor = await enterFrameTitleEditor(page);
+      await page.mouse.click(10, 10);
+      await expect(frameTitleEditor).toHaveCount(0);
+    });
+
+    test('enter unmount frame editor', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      const frameTitleEditor = await enterFrameTitleEditor(page);
+      await pressEnter(page);
+      await expect(frameTitleEditor).toHaveCount(0);
+    });
+  });
+
+  test.describe('add element to frame and then move frame', () => {
+    test.describe('add single element', () => {
+      test('element should be moved since it is fully contained in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await createShapeElement(page, [100, 100], [200, 200], Shape.Square);
+        const noteCoord = await toViewCoord(page, [200, 200]);
+        await addNote(page, '', noteCoord[0], noteCoord[1]);
+        await pressEscape(page);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        await assertSelectedBound(page, [150, 150, 100, 100], 0); // shape
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+        await assertSelectedBound(page, [220, 210, 448, 92], 2); // note
+      });
+
+      test('element should not be moved since it is not fully contained in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await createShapeElement(page, [500, 500], [600, 600], Shape.Square);
+        await pressEscape(page);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        await assertSelectedBound(page, [550, 550, 100, 100], 0); // shape
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+      });
+    });
+
+    test.describe('add group', () => {
+      // Group
+      // |<150px>|
+      // ┌────┐    ─
+      // │  ┌─┼──┐ 150 px
+      // └──┼─┘  │ |
+      //    └────┘ ─
+
+      test('group should be moved since it is fully contained in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await createShapeElement(page, [100, 100], [200, 200], Shape.Square);
+        await createShapeElement(page, [150, 150], [250, 250], Shape.Square);
+        await pressEscape(page);
+
+        await shiftClickView(page, [110, 110]);
+        await shiftClickView(page, [160, 160]);
+        await page.keyboard.press(`${SHORT_KEY}+g`);
+        await pressEscape(page);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        await assertSelectedBound(page, [150, 150, 150, 150], 0); // group
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+      });
+      test('group should be moved since its center is in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await createShapeElement(page, [450, 450], [550, 550], Shape.Square);
+        await createShapeElement(page, [500, 500], [600, 600], Shape.Square);
+        await pressEscape(page);
+
+        await shiftClickView(page, [460, 460]);
+        await shiftClickView(page, [510, 510]);
+        await page.keyboard.press(`${SHORT_KEY}+g`);
+        await pressEscape(page);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        // since the new group center is in the frame, so the group is not child of frame
+        await assertSelectedBound(page, [500, 500, 150, 150], 0); // group
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+      });
+
+      test('group should not be moved since its center is not in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await createShapeElement(page, [500, 500], [600, 600], Shape.Square);
+        await createShapeElement(page, [550, 550], [650, 650], Shape.Square);
+        await pressEscape(page);
+
+        await shiftClickView(page, [510, 510]);
+        await shiftClickView(page, [560, 560]);
+        await page.keyboard.press(`${SHORT_KEY}+g`);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        // since the new group center is not in the frame, so the group is not child of frame
+        await assertSelectedBound(page, [500, 500, 150, 150], 0); // group
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+      });
+    });
+
+    test.describe('add inner frame', () => {
+      test('the inner frame and its children should be moved since it is fully contained in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await pressEscape(page);
+        await createFrame(page, [100, 100], [300, 300]);
+        await pressEscape(page);
+        await createShapeElement(page, [150, 150], [250, 250], Shape.Square);
+        await pressEscape(page);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        await assertSelectedBound(page, [200, 200, 100, 100], 0); // shape
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+        await assertSelectedBound(page, [150, 150, 200, 200], 2); // inner frame
+      });
+
+      test('the inner frame and its children should  be moved since its center is in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await pressEscape(page);
+        await createFrame(page, [400, 400], [600, 600]);
+        await pressEscape(page);
+        await createShapeElement(page, [550, 550], [600, 600], Shape.Square);
+        await pressEscape(page);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        await assertSelectedBound(page, [600, 600, 50, 50], 0); // shape
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+        await assertSelectedBound(page, [450, 450, 200, 200], 2); // inner frame
+      });
+
+      test('the inner frame and its children should also be moved even though its center is not in frame', async ({
+        page,
+      }) => {
+        await createFrame(page, [50, 50], [550, 550]);
+        await pressEscape(page);
+        await createFrame(page, [500, 500], [600, 600]);
+        await pressEscape(page);
+        await createShapeElement(page, [550, 550], [600, 600], Shape.Square);
+        await pressEscape(page);
+
+        await clickView(page, [60, 60]);
+        await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+        await selectAllByKeyboard(page);
+        await assertSelectedBound(page, [600, 600, 50, 50], 0); // shape
+        await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+        await assertSelectedBound(page, [550, 550, 100, 100], 2); // inner frame
+      });
+    });
+
+    test('add mindmap root node and move frame', async ({ page }) => {
+      await createFrame(page, [50, 50], [550, 550]);
+      await pressEscape(page);
+      await triggerComponentToolbarAction(page, 'addMindmap');
+      let mindmapBound = await getSelectedBound(page);
+      await clickView(page, [
+        mindmapBound[0] + 10,
+        mindmapBound[1] + 0.5 * mindmapBound[3],
+      ]);
+      await dragBetweenViewCoords(
+        page,
+        [mindmapBound[0] + 10, mindmapBound[1] + 0.5 * mindmapBound[3]],
+        [mindmapBound[0] + 10 + 50, mindmapBound[1] + 0.5 * mindmapBound[3]]
+      );
+      await pressEscape(page);
+      await selectAllByKeyboard(page);
+      mindmapBound = await getSelectedBound(page);
+      await pressEscape(page);
+
+      await clickView(page, [60, 60]);
+      await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(
+        page,
+        [
+          mindmapBound[0] + 50,
+          mindmapBound[1] + 50,
+          mindmapBound[2],
+          mindmapBound[3],
+        ],
+        0
+      ); // mindmap
+      await assertSelectedBound(page, [100, 100, 500, 500], 1); // frame
+    });
+  });
+
+  test.describe('frame selection', () => {
+    test('frame can be selected by click blank area of frame', async ({
+      page,
+    }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      await pressEscape(page);
+      expect(await getSelectedBoundCount(page)).toBe(0);
+
+      await clickView(page, [300, 300]);
+      expect(await getSelectedBoundCount(page)).toBe(1);
+      await assertSelectedBound(page, [50, 50, 500, 500]);
+    });
+
+    test('shape inside frame can be selected and edited', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      await createShapeElement(page, [100, 100], [200, 200], Shape.Square);
+      await pressEscape(page);
+
+      await clickView(page, [150, 150]);
+      expect(await getSelectedBoundCount(page)).toBe(1);
+      await assertSelectedBound(page, [100, 100, 100, 100]);
+
+      await dblclickView(page, [150, 150]);
+      await type(page, 'hello');
+      await assertEdgelessCanvasText(page, 'hello');
+    });
+
+    test('dom inside frame can be selected and edited', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      const noteCoord = await toViewCoord(page, [100, 100]);
+      await addNote(page, '', noteCoord[0], noteCoord[1]);
+      await page.mouse.click(noteCoord[0] - 80, noteCoord[1]);
+
+      await dblclickView(page, [150, 150]);
+      await type(page, 'hello');
+      await assertRichTexts(page, ['hello']);
+    });
+  });
+
+  test.describe('resize frame then move ', () => {
+    test('resize frame for warping shape', async ({ page }) => {
+      await createFrame(page, [50, 50], [150, 150]);
+      await createShapeElement(page, [200, 200], [300, 300], Shape.Square);
+      await pressEscape(page);
+
+      await clickView(page, [60, 60]);
+      await dragBetweenViewCoords(page, [150, 150], [450, 450]);
+      await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [250, 250, 100, 100], 0); // shape
+      await assertSelectedBound(page, [100, 100, 400, 400], 1); // frame
+    });
+
+    test('resize frame for unwrapping shape', async ({ page }) => {
+      await createFrame(page, [50, 50], [450, 450]);
+      await createShapeElement(page, [200, 200], [300, 300], Shape.Square);
+      await pressEscape(page);
+
+      await clickView(page, [60, 60]);
+      await dragBetweenViewCoords(page, [450, 450], [150, 150]);
+      await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [200, 200, 100, 100], 0); // shape
+      await assertSelectedBound(page, [100, 100, 100, 100], 1); // frame
+    });
+  });
+
+  test('delete frame', async ({ page }) => {
+    await createFrame(page, [50, 50], [450, 450]);
+    await createShapeElement(page, [200, 200], [300, 300], Shape.Square);
+    await pressEscape(page);
+
+    await clickView(page, [60, 60]);
+    await pressBackspace(page);
+    await expect(page.locator('affine-frame')).toHaveCount(0);
+
     await selectAllByKeyboard(page);
-    await assertSelectedBound(page, [20, 20, 100, 100], 0);
-    await assertSelectedBound(page, [120, 20, 100, 100], 1);
+    await assertSelectedBound(page, [200, 200, 100, 100], 0);
   });
 
-  test('edit frame title', async ({ page }) => {
-    await addFrame(page);
-    await autoFit(page);
-    expect(await page.locator('edgeless-frame-title-editor').count()).toBe(0);
-    await dblclickView(page, [-300 + 5, -270 - 20]);
-    await page.locator('edgeless-frame-title-editor').waitFor({
-      state: 'attached',
+  test.describe('frame copy and paste', () => {
+    test('copy of frame should keep relationship of child elements', async ({
+      page,
+    }) => {
+      await createFrame(page, [50, 50], [450, 450]);
+      await createShapeElement(page, [200, 200], [300, 300], Shape.Square);
+      await pressEscape(page);
+
+      await clickView(page, [60, 60]);
+      await copyByKeyboard(page);
+      await selectAllByKeyboard(page);
+      await pressBackspace(page);
+
+      await moveView(page, [250, 250]);
+      await pasteByKeyboard(page);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [200, 200, 100, 100], 0); // shape
+      await assertSelectedBound(page, [50, 50, 400, 400], 1); // frame
+      await pressEscape(page);
+
+      await clickView(page, [60, 60]);
+      await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [250, 250, 100, 100], 0); // shape
+      await assertSelectedBound(page, [100, 100, 400, 400], 1); // frame
     });
-    await type(page, 'ABC');
-    await assertEdgelessCanvasText(page, 'ABC');
-  });
 
-  test('edit frame after zoom', async ({ page }) => {
-    await addFrame(page);
-    await autoFit(page);
-    await zoomOutByKeyboard(page);
-    expect(await page.locator('edgeless-frame-title-editor').count()).toBe(0);
-    await dblclickView(page, [-300 + 5, -270 - 20]);
-    await page.locator('edgeless-frame-title-editor').waitFor({
-      state: 'attached',
+    test('copy of frame by alt/option dragging should keep relationship of child elements', async ({
+      page,
+    }) => {
+      await createFrame(page, [50, 50], [450, 450]);
+      await createShapeElement(page, [200, 200], [300, 300], Shape.Square);
+      await pressEscape(page);
+
+      await clickView(page, [60, 60]);
+      await page.keyboard.down('Alt');
+      await dragBetweenViewCoords(page, [60, 60], [460, 460]);
+      await page.keyboard.up('Alt');
+      await pressEscape(page);
+
+      await shiftClickView(page, [60, 60]);
+      await shiftClickView(page, [250, 250]);
+      await pressBackspace(page);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [600, 600, 100, 100], 0); // shape
+      await assertSelectedBound(page, [450, 450, 400, 400], 1); // frame
+
+      await clickView(page, [460, 460]);
+      await dragBetweenViewCoords(page, [460, 460], [510, 510]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [650, 650, 100, 100], 0); // shape
+      await assertSelectedBound(page, [500, 500, 400, 400], 1); // frame
     });
-    await type(page, 'ABC');
-    await assertEdgelessCanvasText(page, 'ABC');
-  });
 
-  test('edit frame title after drag', async ({ page }) => {
-    await addFrame(page);
-    await autoFit(page);
-    await dragBetweenViewCoords(page, [100, 50], [120, 70]);
-    await selectAllByKeyboard(page);
-    await dblclickView(page, [-300 + 5 + 20, -270 - 20 + 20]);
-    await page.locator('edgeless-frame-title-editor').waitFor({
-      state: 'attached',
+    test('duplicate element in frame', async ({ page }) => {
+      await createFrame(page, [50, 50], [450, 450]);
+      await createShapeElement(page, [100, 100], [200, 200], Shape.Square);
+      await pressEscape(page);
+
+      await clickView(page, [60, 60]);
+      await page.locator('edgeless-more-button').click();
+      await page
+        .locator('editor-menu-action', { hasText: 'Duplicate' })
+        .click();
+      await pressEscape(page);
+
+      await shiftClickView(page, [60, 60]);
+      await shiftClickView(page, [150, 150]);
+      await pressBackspace(page);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [510, 100, 100, 100], 0); // shape
+      await assertSelectedBound(page, [460, 50, 400, 400], 1); // frame
     });
-    await type(page, 'ABC');
-    await assertEdgelessCanvasText(page, 'ABC');
-  });
 
-  test('edit title of the frame that created by tool ', async ({ page }) => {
-    await edgelessCommonSetup(page);
-    await setEdgelessTool(page, 'frame');
+    test('copy of element by alt/option dragging in frame should belong to frame', async ({
+      page,
+    }) => {
+      await createFrame(page, [50, 50], [450, 450]);
+      await createShapeElement(page, [100, 100], [200, 200], Shape.Square);
+      await pressEscape(page);
 
-    await dragBetweenViewCoords(page, [0, 0], [200, 100]);
-    await dblclickView(page, [65, -20]);
-    await page.locator('edgeless-frame-title-editor').waitFor({
-      state: 'attached',
+      await clickView(page, [150, 150]);
+      await page.keyboard.down('Alt');
+      await dragBetweenViewCoords(page, [150, 150], [250, 250]);
+      await page.keyboard.up('Alt');
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [100, 100, 100, 100], 0); // shape
+      await assertSelectedBound(page, [200, 200, 100, 100], 1); // shape
+      await assertSelectedBound(page, [50, 50, 400, 400], 2); // frame
+
+      await clickView(page, [60, 60]);
+      await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [150, 150, 100, 100], 0); // shape
+      await assertSelectedBound(page, [250, 250, 100, 100], 1); // shape
+      await assertSelectedBound(page, [100, 100, 400, 400], 2); // frame
     });
-    await type(page, 'ABC');
-    await assertEdgelessCanvasText(page, 'ABC');
-  });
 
-  test('blur unmount frame editor', async ({ page }) => {
-    await addFrame(page);
-    await autoFit(page);
-    await dblclickView(page, [-300 + 5, -270 - 20]);
-    await page.locator('edgeless-frame-title-editor').waitFor({
-      state: 'attached',
+    test('copy of element by alt/option dragging out of frame should not belong to frame', async ({
+      page,
+    }) => {
+      await createFrame(page, [50, 50], [450, 450]);
+      await createShapeElement(page, [100, 100], [200, 200], Shape.Square);
+      await pressEscape(page);
+
+      await clickView(page, [150, 150]);
+      await page.keyboard.down('Alt');
+      await dragBetweenViewCoords(page, [150, 150], [550, 550]);
+      await page.keyboard.up('Alt');
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [100, 100, 100, 100], 0); // shape
+      await assertSelectedBound(page, [500, 500, 100, 100], 1); // shape
+      await assertSelectedBound(page, [50, 50, 400, 400], 2); // frame
+
+      await clickView(page, [60, 60]);
+      await dragBetweenViewCoords(page, [60, 60], [110, 110]);
+
+      await selectAllByKeyboard(page);
+      await assertSelectedBound(page, [150, 150, 100, 100], 0); // shape
+      await assertSelectedBound(page, [500, 500, 100, 100], 1); // shape
+      await assertSelectedBound(page, [100, 100, 400, 400], 2); // frame
     });
-    await page.mouse.click(10, 10);
-    expect(await page.locator('edgeless-frame-title-editor').count()).toBe(0);
-  });
-
-  test('enter unmount frame editor', async ({ page }) => {
-    await addFrame(page);
-    await autoFit(page);
-    await dblclickView(page, [-300 + 5, -270 - 20]);
-    await page.locator('edgeless-frame-title-editor').waitFor({
-      state: 'attached',
-    });
-    await pressEnter(page);
-    expect(await page.locator('edgeless-frame-title-editor').count()).toBe(0);
-  });
-
-  test('dom inside frame can be selected and edited', async ({ page }) => {
-    await init(page);
-    const noteCoord = await toViewCoord(page, [0, 200]);
-    await addNote(page, '', noteCoord[0], noteCoord[1]);
-    await page.mouse.click(noteCoord[0] - 80, noteCoord[1]);
-    await selectAllByKeyboard(page);
-    await waitNextFrame(page);
-    await triggerComponentToolbarAction(page, 'addFrame');
-    await autoFit(page);
-
-    await dblclickView(page, [50, 250]);
-    await type(page, 'hello');
-    await assertRichTexts(page, ['hello']);
   });
 });

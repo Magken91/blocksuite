@@ -5,7 +5,7 @@ import type { IPoint, IVec } from '@blocksuite/global/utils';
 import { Bound, Vec, noop } from '@blocksuite/global/utils';
 import { DocCollection } from '@blocksuite/store';
 
-import { getTopElements } from '../../utils/tree.js';
+import { getTopElements } from '../utils/tree.js';
 import { EdgelessToolController } from './edgeless-tool.js';
 
 type FrameTool = {

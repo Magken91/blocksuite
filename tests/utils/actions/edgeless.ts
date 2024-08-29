@@ -1560,6 +1560,14 @@ export async function getConnectorPath(page: Page, index = 0): Promise<IVec[]> {
   );
 }
 
+export async function getSelectedBoundCount(page: Page) {
+  return page.evaluate(() => {
+    const container = document.querySelector('affine-edgeless-root');
+    if (!container) throw new Error('container not found');
+    return container.service.selection.selectedElements.length;
+  });
+}
+
 export async function getSelectedBound(
   page: Page,
   index = 0

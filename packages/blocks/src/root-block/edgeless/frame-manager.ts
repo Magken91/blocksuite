@@ -2,6 +2,7 @@ import type { FrameBlockModel } from '@blocksuite/affine-model';
 import type { NoteBlockModel } from '@blocksuite/affine-model';
 import type { Doc } from '@blocksuite/store';
 
+import { isGfxContainerElm } from '@blocksuite/block-std/gfx';
 import { BlockSuiteError, ErrorCode } from '@blocksuite/global/exceptions';
 import { Bound, DisposableGroup, type IVec } from '@blocksuite/global/utils';
 import { Boxed, DocCollection } from '@blocksuite/store';
@@ -10,9 +11,11 @@ import type { EdgelessRootService } from '../../index.js';
 import type { SurfaceBlockModel } from '../../surface-block/surface-model.js';
 
 import { Overlay, type RoughCanvas } from '../../surface-block/index.js';
+import { renderableInEdgeless } from '../../surface-block/managers/layer-utils.js';
 import { GfxBlockModel } from './block-model.js';
 import { edgelessElementsBound } from './utils/bound-utils.js';
 import { isFrameBlock } from './utils/query.js';
+import { getTopElements } from './utils/tree.js';
 
 const MIN_FRAME_WIDTH = 800;
 const MIN_FRAME_HEIGHT = 640;
@@ -48,18 +51,73 @@ export class EdgelessFrameManager {
   private _disposable = new DisposableGroup();
 
   constructor(private _rootService: EdgelessRootService) {
-    this._watchElementDeleted();
+    this._watchElementAddedOrDeleted();
   }
 
-  private _watchElementDeleted() {
+  private _addFrameBlock(bound: Bound) {
+    const surfaceModel = this._rootService.doc.getBlocksByFlavour(
+      'affine:surface'
+    )[0].model as SurfaceBlockModel;
+
+    const id = this._rootService.addBlock(
+      'affine:frame',
+      {
+        title: new DocCollection.Y.Text(`Frame ${this.frames.length + 1}`),
+        xywh: bound.serialize(),
+      },
+      surfaceModel
+    );
+    const frameModel = this._rootService.getElementById(id);
+
+    if (!frameModel || !isFrameBlock(frameModel)) {
+      throw new BlockSuiteError(
+        ErrorCode.GfxBlockElementError,
+        'Frame model is not found'
+      );
+    }
+
+    return frameModel;
+  }
+
+  private _watchElementAddedOrDeleted() {
     this._disposable.add(
-      this._rootService.surface.elementRemoved.on(({ model }) => {
-        this.removeParentFrame(model);
+      this._rootService.surface.elementAdded.on(({ id, local }) => {
+        const element = this._rootService.surface.getElementById(id);
+        if (element && local) {
+          if (isGfxContainerElm(element)) {
+            element.childElements.forEach(child => {
+              this.removeParentFrame(child);
+            });
+          }
+          const frame = this.getFrameFromPoint(element.elementBound.center);
+          frame && this.addElementsToFrame(frame, [element]);
+        }
+      })
+    );
+
+    this._disposable.add(
+      this._rootService.surface.elementRemoved.on(({ model, local }) => {
+        local && this.removeParentFrame(model);
       })
     );
 
     this._disposable.add(
       this._rootService.doc.slots.blockUpdated.on(payload => {
+        if (
+          payload.type === 'add' &&
+          payload.model instanceof GfxBlockModel &&
+          renderableInEdgeless(
+            this._rootService.doc,
+            this._rootService.surface,
+            payload.model
+          )
+        ) {
+          const frame = this.getFrameFromPoint(
+            payload.model.elementBound.center,
+            isFrameBlock(payload.model) ? [payload.model] : []
+          );
+          frame && this.addElementsToFrame(frame, [payload.model]);
+        }
         if (payload.type === 'delete') {
           const element = this._rootService.getElementById(payload.model.id);
           if (element) this.removeParentFrame(element);
@@ -95,10 +153,25 @@ export class EdgelessFrameManager {
     });
   }
 
-  createFrameOnSelected() {
-    const surfaceModel =
-      this._rootService.doc.getBlockByFlavour('affine:surface')[0];
+  createFrameOnBound(bound: Bound) {
+    const frameModel = this._addFrameBlock(bound);
 
+    this.addElementsToFrame(
+      frameModel,
+      getTopElements(this.getElementsInFrameBound(frameModel))
+    );
+
+    this._rootService.doc.captureSync();
+
+    this._rootService.selection.set({
+      elements: [frameModel.id],
+      editing: false,
+    });
+
+    return frameModel;
+  }
+
+  createFrameOnElements(elements: BlockSuite.EdgelessModel[]) {
     let bound = edgelessElementsBound(
       this._rootService.selection.selectedElements
     );
@@ -111,27 +184,10 @@ export class EdgelessFrameManager {
       const offset = (MIN_FRAME_HEIGHT - bound.h) / 2;
       bound = bound.expand(0, offset);
     }
-    const id = this._rootService.addBlock(
-      'affine:frame',
-      {
-        title: new DocCollection.Y.Text(`Frame ${this.frames.length + 1}`),
-        xywh: bound.serialize(),
-      },
-      surfaceModel
-    );
-    const frameModel = this._rootService.getElementById(id);
 
-    if (!frameModel || !isFrameBlock(frameModel)) {
-      throw new BlockSuiteError(
-        ErrorCode.GfxBlockElementError,
-        'Frame model is not found'
-      );
-    }
+    const frameModel = this._addFrameBlock(bound);
 
-    this.addElementsToFrame(
-      frameModel,
-      this.getElementsInFrameBound(frameModel)
-    );
+    this.addElementsToFrame(frameModel, getTopElements(elements));
 
     this._rootService.doc.captureSync();
 
@@ -140,7 +196,25 @@ export class EdgelessFrameManager {
       editing: false,
     });
 
-    return this._rootService.getElementById(id);
+    return frameModel;
+  }
+
+  createFrameOnSelected() {
+    return this.createFrameOnElements(
+      this._rootService.selection.selectedElements
+    );
+  }
+
+  createFrameOnViewportCenter(wh: [number, number]) {
+    const center = this._rootService.viewport.center;
+    const bound = new Bound(
+      center.x - wh[0] / 2,
+      center.y - wh[1] / 2,
+      wh[0],
+      wh[1]
+    );
+
+    this.createFrameOnBound(bound);
   }
 
   dispose() {
@@ -212,12 +286,12 @@ export class EdgelessFrameManager {
   }
 
   removeParentFrame(element: BlockSuite.EdgelessModel) {
-    this._rootService.doc.transact(() => {
-      const parentFrame = this.getParentFrame(element);
-      if (parentFrame) {
+    const parentFrame = this.getParentFrame(element);
+    if (parentFrame) {
+      this._rootService.doc.transact(() => {
         parentFrame.childElementIds?.getValue()?.delete(element.id);
-      }
-    });
+      });
+    }
   }
 
   /**

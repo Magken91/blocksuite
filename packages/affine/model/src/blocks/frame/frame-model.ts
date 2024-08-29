@@ -1,3 +1,5 @@
+import type { GfxBlockElementModel } from '@blocksuite/block-std/gfx';
+
 import {
   type GfxContainerElement,
   type GfxElementGeometry,
@@ -19,7 +21,7 @@ import type { Color } from '../../consts/index.js';
 
 import { GfxCompatible } from '../../utils/index.js';
 
-type FrameBlockProps = {
+export type FrameBlockProps = {
   title: Text;
   background: Color;
   xywh: SerializedXYWH;
@@ -71,9 +73,17 @@ export class FrameBlockModel
       .find(model => model instanceof SurfaceBlockModel);
     if (!surface) return [];
 
-    return this.childIds
-      .map(id => surface.getElementById(id))
-      .filter(element => element !== null);
+    const elements: BlockSuite.EdgelessModel[] = [];
+
+    for (const key of this.childIds) {
+      const element =
+        surface.getElementById(key) ||
+        (surface.doc.getBlockById(key) as GfxBlockElementModel);
+
+      element && elements.push(element);
+    }
+
+    return elements;
   }
 
   get childIds() {

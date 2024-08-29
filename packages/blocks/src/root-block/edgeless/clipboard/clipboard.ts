@@ -27,6 +27,7 @@ import {
 import {
   type BlockSnapshot,
   BlockSnapshotSchema,
+  Boxed,
   DocCollection,
   Job,
   type SliceSnapshot,
@@ -623,15 +624,37 @@ export class EdgelessClipboardController extends PageClipboard {
     return embedFigmaIds;
   }
 
-  private _createFrameBlocks(frames: BlockSnapshot[]) {
+  private _createFrameBlocks(
+    frames: BlockSnapshot[],
+    oldToNewIdMap: Map<string, string>
+  ) {
     const frameIds = frames.map(({ props }) => {
-      const { xywh, title, background } = props;
+      const { xywh, title, background, childElementIds } = props;
+
+      const newChildElementIds = new DocCollection.Y.Map<boolean>();
+
+      if (
+        typeof childElementIds === 'object' &&
+        childElementIds !== null &&
+        'value' in childElementIds &&
+        typeof childElementIds.value === 'object' &&
+        childElementIds.value !== null
+      ) {
+        Object.keys(childElementIds.value).forEach(oldId => {
+          const newId = oldToNewIdMap.get(oldId);
+          if (newId) {
+            newChildElementIds.set(newId, true);
+          }
+        });
+      }
+
       const frameId = this.host.service.addBlock(
         'affine:frame',
         {
           xywh,
           background,
           title: fromJSON(title),
+          childElementIds: new Boxed(newChildElementIds),
         },
         this.surface.model.id
       );
