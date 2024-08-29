@@ -1,6 +1,10 @@
-import type { BlockSpec } from '@blocksuite/block-std';
-
 import { EmbedLoomBlockSchema } from '@blocksuite/affine-model';
+import {
+  BlockFlavourIdentifier,
+  BlockServiceIdentifier,
+  type BlockSpec,
+  BlockStdScope,
+} from '@blocksuite/block-std';
 import { literal } from 'lit/static-html.js';
 
 import './embed-edgeless-loom-bock.js';
@@ -15,5 +19,15 @@ export const EmbedLoomBlockSpec: BlockSpec = {
         : literal`affine-embed-loom-block`;
     },
   },
-  service: EmbedLoomBlockService,
+  setup: di => {
+    di.addImpl(BlockFlavourIdentifier('affine:embed-loom'), () => ({
+      flavour: 'affine:embed-loom',
+    }));
+
+    di.addImpl(
+      BlockServiceIdentifier('affine:embed-loom'),
+      EmbedLoomBlockService,
+      [BlockStdScope, BlockFlavourIdentifier('affine:embed-loom')]
+    );
+  },
 };

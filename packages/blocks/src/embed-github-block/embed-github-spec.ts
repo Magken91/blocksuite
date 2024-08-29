@@ -1,6 +1,10 @@
-import type { BlockSpec } from '@blocksuite/block-std';
-
 import { EmbedGithubBlockSchema } from '@blocksuite/affine-model';
+import {
+  BlockFlavourIdentifier,
+  BlockServiceIdentifier,
+  type BlockSpec,
+  BlockStdScope,
+} from '@blocksuite/block-std';
 import { literal } from 'lit/static-html.js';
 
 import './embed-edgeless-github-block.js';
@@ -15,5 +19,15 @@ export const EmbedGithubBlockSpec: BlockSpec = {
         : literal`affine-embed-github-block`;
     },
   },
-  service: EmbedGithubBlockService,
+  setup: di => {
+    di.addImpl(BlockFlavourIdentifier('affine:embed-github'), () => ({
+      flavour: 'affine:embed-github',
+    }));
+
+    di.addImpl(
+      BlockServiceIdentifier('affine:embed-github'),
+      EmbedGithubBlockService,
+      [BlockStdScope, BlockFlavourIdentifier('affine:embed-github')]
+    );
+  },
 };

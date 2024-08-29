@@ -1,13 +1,17 @@
-import type { AbstractEditor } from '@blocksuite/blocks';
+import type {
+  EdgelessRootBlockComponent,
+  PageRootBlockComponent,
+} from '@blocksuite/blocks';
 import type { BlockModel, Doc } from '@blocksuite/store';
 
+import {
+  BlockServiceIdentifier,
+  BlockServiceWatcher,
+  BlockServiceWatcherIdentifier,
+} from '@blocksuite/block-std';
 import { type BlockSpec, EditorHost } from '@blocksuite/block-std';
 import { ShadowlessElement, WithDisposable } from '@blocksuite/block-std';
-import {
-  DocModeProvider,
-  type EdgelessRootBlockComponent,
-  type PageRootBlockComponent,
-} from '@blocksuite/blocks';
+import { type AbstractEditor, DocModeProvider } from '@blocksuite/blocks';
 import {
   DocMode,
   EdgelessEditorBlockSpecs,
@@ -57,15 +61,23 @@ export class AffineEditorContainer
         const setup = spec.setup;
         spec = {
           ...spec,
-          setup: (slots, disposable, di) => {
-            setup?.(slots, disposable, di);
-            slots.mounted.once(({ service }) => {
-              disposable.add(
-                service.std
-                  .get(DocModeProvider)
-                  .onModeChange(this.switchEditor.bind(this))
-              );
-            });
+          setup: di => {
+            setup?.(di);
+            const switchEditor = this.switchEditor.bind(this);
+            class SwitchWatcher extends BlockServiceWatcher {
+              override setup() {
+                const blockService = this.blockService;
+                const docModeService = blockService.std.get(DocModeProvider);
+                blockService.disposables.add(
+                  docModeService.onModeChange(switchEditor)
+                );
+              }
+            }
+            di.addImpl(
+              BlockServiceWatcherIdentifier('editorContainerEdgelessSpec'),
+              SwitchWatcher,
+              [BlockServiceIdentifier('affine:page')]
+            );
           },
         };
       }
@@ -96,14 +108,23 @@ export class AffineEditorContainer
         const setup = spec.setup;
         spec = {
           ...spec,
-          setup: (slots, disposable, di) => {
-            setup?.(slots, disposable, di);
-            slots.mounted.once(({ service }) => {
-              const docModeService = service.std.get(DocModeProvider);
-              disposable.add(
-                docModeService.onModeChange(this.switchEditor.bind(this))
-              );
-            });
+          setup: di => {
+            setup?.(di);
+            const switchEditor = this.switchEditor.bind(this);
+            class SwitchWatcher extends BlockServiceWatcher {
+              override setup() {
+                const blockService = this.blockService;
+                const docModeService = blockService.std.get(DocModeProvider);
+                blockService.disposables.add(
+                  docModeService.onModeChange(switchEditor)
+                );
+              }
+            }
+            di.addImpl(
+              BlockServiceWatcherIdentifier('editorContainerPageSpec'),
+              SwitchWatcher,
+              [BlockServiceIdentifier('affine:page')]
+            );
           },
         };
       }

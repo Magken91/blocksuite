@@ -1,13 +1,19 @@
-import type { BlockSpec, EditorHost } from '@blocksuite/block-std';
+import type { PageRootService } from '@blocksuite/blocks';
 import type { BlockCollection, DocCollection } from '@blocksuite/store';
 
 import {
-  AffineFormatBarWidget,
+  BlockServiceWatcher,
+  BlockServiceWatcherIdentifier,
+  type BlockSpec,
+  type EditorHost,
+} from '@blocksuite/block-std';
+import { BlockServiceIdentifier } from '@blocksuite/block-std';
+import { AffineFormatBarWidget } from '@blocksuite/blocks';
+import {
   DocMode,
   DocModeProvider,
   EdgelessEditorBlockSpecs,
   PageEditorBlockSpecs,
-  type PageRootService,
   toolbarDefaultConfig,
 } from '@blocksuite/blocks';
 import { assertExists } from '@blocksuite/global/utils';
@@ -24,7 +30,7 @@ import { SidePanel } from '../../_common/components/side-panel.js';
 import {
   mockNotificationService,
   mockQuickSearchService,
-} from '../../_common/mock-services.js';
+} from '../../_common/mock-services';
 
 function setDocModeFromUrlParams(service: DocModeProvider) {
   const params = new URLSearchParams(location.search);
@@ -163,21 +169,29 @@ export async function mountDefaultDocEditor(collection: DocCollection) {
     const setup = spec.setup;
     const newSpec: typeof spec = {
       ...spec,
-      setup: (slots, disposable, di) => {
-        setup?.(slots, disposable, di);
-        slots.mounted.once(({ service }) => {
-          const pageRootService = service as PageRootService;
-          const onFormatBarConnected = slots.widgetConnected.on(view => {
-            if (view.component instanceof AffineFormatBarWidget) {
-              configureFormatBar(view.component);
-            }
-          });
-          disposable.add(onFormatBarConnected);
-          pageRootService.notificationService =
-            mockNotificationService(pageRootService);
-          pageRootService.quickSearchService =
-            mockQuickSearchService(collection);
-        });
+      setup: di => {
+        setup?.(di);
+        class PatchPageServiceWatcher extends BlockServiceWatcher {
+          override setup() {
+            const pageRootService = this.blockService as PageRootService;
+            const onFormatBarConnected =
+              pageRootService.specSlots.widgetConnected.on(view => {
+                if (view.component instanceof AffineFormatBarWidget) {
+                  configureFormatBar(view.component);
+                }
+              });
+            pageRootService.disposables.add(onFormatBarConnected);
+            pageRootService.notificationService =
+              mockNotificationService(pageRootService);
+            pageRootService.quickSearchService =
+              mockQuickSearchService(collection);
+          }
+        }
+        di.addImpl(
+          BlockServiceWatcherIdentifier('pathPageRootSpec'),
+          PatchPageServiceWatcher,
+          [BlockServiceIdentifier('affine:page')]
+        );
       },
     };
 

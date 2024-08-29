@@ -3,7 +3,12 @@ import {
   DocModeProvider,
   DocModeService,
 } from '@blocksuite/affine-shared/services';
-import { type BlockSpec, BlockStdScope } from '@blocksuite/block-std';
+import {
+  BlockFlavourIdentifier,
+  BlockServiceIdentifier,
+  type BlockSpec,
+  BlockStdScope,
+} from '@blocksuite/block-std';
 import { literal, unsafeStatic } from 'lit/static-html.js';
 
 import type { RootBlockConfig } from '../root-config.js';
@@ -40,7 +45,6 @@ export type PageRootBlockSpecType = BlockSpec<
 
 export const PageRootBlockSpec: PageRootBlockSpecType = {
   schema: RootBlockSchema,
-  service: PageRootService,
   view: {
     component: literal`affine-page-root`,
     widgets: {
@@ -73,7 +77,15 @@ export const PageRootBlockSpec: PageRootBlockSpecType = {
     },
   },
   commands,
-  setup: (_slots, _disposableGroup, di) => {
+  setup: di => {
+    di.addImpl(BlockFlavourIdentifier('affine:page'), () => ({
+      flavour: 'affine:page',
+    }));
+    di.addImpl(BlockServiceIdentifier('affine:page'), PageRootService, [
+      BlockStdScope,
+      BlockFlavourIdentifier('affine:page'),
+    ]);
+
     di.addImpl(DocModeProvider, DocModeService, [BlockStdScope]);
   },
 };

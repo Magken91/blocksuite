@@ -1,5 +1,9 @@
-import type { BlockSpec } from '@blocksuite/block-std';
-
+import {
+  BlockFlavourIdentifier,
+  BlockServiceIdentifier,
+  type BlockSpec,
+  BlockStdScope,
+} from '@blocksuite/block-std';
 import { literal } from 'lit/static-html.js';
 
 import { commands } from './commands/index.js';
@@ -13,7 +17,15 @@ export const PageSurfaceBlockSpec: BlockSpec = {
     component: literal`affine-surface-void`,
   },
   commands,
-  service: SurfaceBlockService,
+  setup: di => {
+    di.addImpl(BlockFlavourIdentifier('affine:surface'), () => ({
+      flavour: 'affine:surface',
+    }));
+    di.addImpl(BlockServiceIdentifier('affine:surface'), SurfaceBlockService, [
+      BlockStdScope,
+      BlockFlavourIdentifier('affine:surface'),
+    ]);
+  },
 };
 
 export const EdgelessSurfaceBlockSpec: BlockSpec = {
@@ -22,5 +34,13 @@ export const EdgelessSurfaceBlockSpec: BlockSpec = {
     component: literal`affine-surface`,
   },
   commands,
-  service: SurfaceBlockService,
+  setup: di => {
+    di.addImpl(BlockFlavourIdentifier('affine:surface'), () => ({
+      flavour: 'affine:surface',
+    }));
+    di.addImpl(BlockServiceIdentifier('affine:surface'), SurfaceBlockService, [
+      BlockStdScope,
+      BlockFlavourIdentifier('affine:surface'),
+    ]);
+  },
 };

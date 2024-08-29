@@ -4,7 +4,8 @@ import { DisposableGroup } from '@blocksuite/global/utils';
 
 import type { EventName, UIEventHandler } from '../event/index.js';
 import type { BlockStdScope } from '../scope/index.js';
-import type { BlockSpecSlots } from '../spec/slots.js';
+
+import { type BlockSpecSlots, getSlots } from '../spec/slots.js';
 
 export interface BlockServiceOptions {
   flavour: string;
@@ -17,14 +18,13 @@ export class BlockService<_Model extends BlockModel = BlockModel> {
 
   readonly flavour: string;
 
-  readonly specSlots: BlockSpecSlots;
+  readonly specSlots = getSlots();
 
-  readonly std: BlockStdScope;
-
-  constructor(options: BlockServiceOptions) {
-    this.flavour = options.flavour;
-    this.std = options.std;
-    this.specSlots = options.slots;
+  constructor(
+    readonly std: BlockStdScope,
+    readonly flavourProvider: { flavour: string }
+  ) {
+    this.flavour = flavourProvider.flavour;
   }
 
   bindHotKey(
@@ -89,3 +89,9 @@ export class BlockService<_Model extends BlockModel = BlockModel> {
 
 export type BlockServiceConstructor<T extends BlockService = BlockService> =
   new (options: BlockServiceOptions) => T;
+
+export abstract class BlockServiceWatcher {
+  constructor(readonly blockService: BlockService) {}
+
+  abstract setup(): void;
+}

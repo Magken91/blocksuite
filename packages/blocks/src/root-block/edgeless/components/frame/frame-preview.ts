@@ -1,6 +1,11 @@
 import type { FrameBlockModel } from '@blocksuite/affine-model';
 
 import {
+  BlockServiceWatcher,
+  BlockServiceWatcherIdentifier,
+} from '@blocksuite/block-std';
+import {
+  BlockServiceIdentifier,
   type EditorHost,
   ShadowlessElement,
   WithDisposable,
@@ -108,15 +113,30 @@ export class FramePreview extends WithDisposable(ShadowlessElement) {
   }
 
   private _initSpec() {
-    this._previewSpec.setup('affine:page', ({ viewConnected }) => {
-      viewConnected.on(({ component }) => {
-        const edgelessBlock = component as EdgelessRootPreviewBlockComponent;
+    const refreshViewport = this._refreshViewport.bind(this);
+    class FramePreviewWatcher extends BlockServiceWatcher {
+      override setup() {
+        const blockService = this.blockService;
+        blockService.disposables.add(
+          blockService.specSlots.viewConnected.on(({ component }) => {
+            const edgelessBlock =
+              component as EdgelessRootPreviewBlockComponent;
 
-        edgelessBlock.editorViewportSelector = 'frame-preview-viewport';
-        edgelessBlock.service.viewport.sizeUpdated.once(() => {
-          this._refreshViewport();
-        });
-      });
+            edgelessBlock.editorViewportSelector = 'frame-preview-viewport';
+            edgelessBlock.service.viewport.sizeUpdated.once(() => {
+              refreshViewport();
+            });
+          })
+        );
+      }
+    }
+
+    this._previewSpec.setup('affine:page', di => {
+      di.addImpl(
+        BlockServiceWatcherIdentifier('framePreviewWatcher'),
+        FramePreviewWatcher,
+        [BlockServiceIdentifier('affine:page')]
+      );
     });
   }
 

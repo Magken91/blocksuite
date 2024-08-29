@@ -1,6 +1,9 @@
 import type { BlockCollection, DocCollection } from '@blocksuite/store';
 
 import {
+  BlockServiceIdentifier,
+  BlockServiceWatcher,
+  BlockServiceWatcherIdentifier,
   type BlockSpec,
   BlockStdScope,
   type EditorHost,
@@ -113,27 +116,32 @@ export async function mountDefaultDocEditor(collection: DocCollection) {
     const setup = spec.setup;
     const newSpec: typeof spec = {
       ...spec,
-      setup: (slots, disposable, di) => {
-        setup?.(slots, disposable, di);
-        slots.mounted.once(({ service }) => {
-          const pageRootService = service as PageRootService;
-          pageRootService.notificationService =
-            mockNotificationService(pageRootService);
-          pageRootService.quickSearchService =
-            mockQuickSearchService(collection);
-          pageRootService.peekViewService = {
-            peek(target: unknown) {
-              alert('Peek view not implemented in playground');
-              console.log('peek', target);
-              return Promise.resolve();
-            },
-          };
-          pageRootService.std.container.override(
-            DocModeProvider,
-            MockDocModeService,
-            [BlockStdScope]
-          );
-        });
+      setup: di => {
+        setup?.(di);
+        di.override(DocModeProvider, MockDocModeService, [BlockStdScope]);
+        class PatchPageServiceWatcher extends BlockServiceWatcher {
+          override setup() {
+            this.blockService.specSlots.mounted.once(({ service }) => {
+              const pageRootService = service as PageRootService;
+              pageRootService.notificationService =
+                mockNotificationService(pageRootService);
+              pageRootService.quickSearchService =
+                mockQuickSearchService(collection);
+              pageRootService.peekViewService = {
+                peek(target: unknown) {
+                  alert('Peek view not implemented in playground');
+                  console.log('peek', target);
+                  return Promise.resolve();
+                },
+              };
+            });
+          }
+        }
+        di.addImpl(
+          BlockServiceWatcherIdentifier('pathPageRootSpec'),
+          PatchPageServiceWatcher,
+          [BlockServiceIdentifier('affine:page')]
+        );
       },
     };
 

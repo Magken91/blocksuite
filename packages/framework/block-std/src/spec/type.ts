@@ -1,11 +1,9 @@
 import type { Container } from '@blocksuite/global/di';
-import type { DisposableGroup } from '@blocksuite/global/utils';
 import type { BlockModel, BlockSchemaType } from '@blocksuite/store';
 import type { StaticValue } from 'lit/static-html.js';
 
 import type { BlockService } from '../service/index.js';
 import type { BlockServiceConstructor } from '../service/index.js';
-import type { BlockSpecSlots } from './slots.js';
 
 export interface BlockView<WidgetNames extends string = string> {
   component: StaticValue | ((model: BlockModel) => StaticValue);
@@ -24,9 +22,5 @@ export interface BlockSpec<
   config?: BlockConfig;
   commands?: BlockCommands;
   service?: BlockServiceConstructor<Service>;
-  setup?: (
-    slots: BlockSpecSlots,
-    disposableGroup: DisposableGroup,
-    di: Container
-  ) => void;
+  setup?: (di: Container) => void;
 }
