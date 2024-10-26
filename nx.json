@@ -6,41 +6,18 @@
       "outputs": ["{projectRoot}/dist"],
       "cache": true
     },
-    "test": {
-      "cache": true
-    },
-    "lint": {
-      "cache": true
-    },
-    "test:unit": {
-      "cache": true
-    },
-    "test:unit:coverage": {
-      "cache": true
-    },
-    "lint:lit": {
-      "cache": true
-    },
-    "lint:circular": {
-      "dependsOn": ["^build"],
-      "cache": true
-    },
-    "test:node": {
-      "cache": true
-    },
-    "vite:preview": {
-      "cache": true,
-      "dependsOn": ["build"]
-    }
+    "test": { "cache": true },
+    "lint": { "cache": true },
+    "test:unit": { "cache": true },
+    "test:unit:coverage": { "cache": true },
+    "lint:lit": { "cache": true },
+    "lint:circular": { "dependsOn": ["^build"], "cache": true },
+    "test:node": { "cache": true },
+    "vite:preview": { "cache": true, "dependsOn": ["build"] }
   },
   "defaultBase": "master",
   "plugins": [
-    {
-      "plugin": "@nx/eslint/plugin",
-      "options": {
-        "targetName": "lint"
-      }
-    },
+    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
     {
       "plugin": "@nx/vite/plugin",
       "options": {
@@ -53,11 +30,8 @@
     },
     {
       "plugin": "@nx/playwright/plugin",
-      "options": {
-        "targetName": "e2e",
-        "ciTargetName": "e2e-ci"
-      }
+      "options": { "targetName": "e2e", "ciTargetName": "e2e-ci" }
     }
   ],
-  "nxCloudAccessToken": "ZGJhZDk0YmUtMDEzYi00YjAwLTg3ZWUtMjFmMWVjNWNlZTFjfHJlYWQtd3JpdGU="
+  "nxCloudAccessToken": "MmNmOTk4NDAtNTNhYy00ZTNjLTlhZTctMzJiZTYyMjIyYTM5fHJlYWQtd3JpdGU="
 }
